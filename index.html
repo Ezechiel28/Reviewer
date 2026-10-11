@@ -4,6 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Reviewer — study sets that stick</title>
+<meta name="theme-color" content="#0A0E17">
+<script>
+  /* Apply the saved (or system) theme before first paint so there's no flash. */
+  (function(){
+    try{
+      var t = localStorage.getItem("reviewerApp.theme.v1");
+      if(t !== "light" && t !== "dark"){
+        t = (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+      document.documentElement.setAttribute("data-bs-theme", t);
+    }catch(e){
+      document.documentElement.setAttribute("data-theme", "dark");
+      document.documentElement.setAttribute("data-bs-theme", "dark");
+    }
+  })();
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -570,6 +587,76 @@
   .btn-close{ filter: invert(1) grayscale(1); }
 
   .toast{ font-family: var(--font-mono); font-size:.86rem; border-left: 3px solid var(--cyan) !important; }
+
+  /* ---------- theme toggle ---------- */
+  .theme-toggle{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:2.1rem; height:2.1rem; padding:0;
+    font-size:1rem;
+  }
+  :root[data-theme="dark"]{ color-scheme: dark; }
+
+  /* ===================== LIGHT THEME ===================== */
+  :root[data-theme="light"]{
+    color-scheme: light;
+
+    --bg:#F3F6FB;
+    --bg-alt:#FFFFFF;
+    --panel:#FFFFFF;
+    --panel-raised:#EDF1F8;
+    --line:#D3DBEA;
+    --line-soft:#E3E9F4;
+
+    --text:#141B2D;
+    --text-dim:#4F5A74;
+    --text-faint:#76809A;
+
+    --cyan:#0B7F94;
+    --cyan-dim:#7CC3CF;
+    --violet:#6550DC;
+    --amber:#B06F00;
+    --green:#0F7F55;
+    --red:#D2304A;
+  }
+  :root[data-theme="light"] body{
+    background:
+      radial-gradient(circle at 18px 18px, rgba(11,127,148,.07) 1px, transparent 1px) 0 0/36px 36px,
+      radial-gradient(1200px 500px at 15% -10%, rgba(11,127,148,.08), transparent 60%),
+      radial-gradient(1000px 600px at 100% 0%, rgba(101,80,220,.06), transparent 55%),
+      var(--bg);
+  }
+  :root[data-theme="light"] ::selection{ background: rgba(11,127,148,.22); color: var(--text); }
+
+  :root[data-theme="light"] .btn-primary{
+    background: var(--cyan);
+    border-color: var(--cyan);
+    color:#fff;
+  }
+  :root[data-theme="light"] .btn-primary:hover,
+  :root[data-theme="light"] .btn-primary:focus{
+    background:#096B7D;
+    border-color:#096B7D;
+    color:#fff;
+    box-shadow: 0 0 0 3px rgba(11,127,148,.18), 0 6px 18px -6px rgba(11,127,148,.45);
+  }
+  :root[data-theme="light"] .btn-primary:disabled{ background: var(--cyan); border-color: var(--cyan); color:#fff; }
+  :root[data-theme="light"] .btn-outline-secondary:hover{ background: rgba(11,127,148,.08); }
+  :root[data-theme="light"] .btn-danger{ color:#fff; }
+  :root[data-theme="light"] .btn-danger:hover{ background:#B82840; border-color:#B82840; color:#fff; }
+  :root[data-theme="light"] .btn-icon:hover{ background: rgba(0,0,0,.06); }
+  :root[data-theme="light"] .btn-close{ filter:none; }
+
+  :root[data-theme="light"] .reviewer-row:hover{ background: rgba(11,127,148,.07); }
+  :root[data-theme="light"] .add-flashcard-btn:hover{ background: rgba(11,127,148,.07); }
+  :root[data-theme="light"] .mode-pills .nav-link.active{ background: rgba(11,127,148,.1); }
+  :root[data-theme="light"] .btn-check:checked + .btn-outline-secondary{ background: rgba(11,127,148,.12); }
+  :root[data-theme="light"] .mic-btn:hover{ background: rgba(11,127,148,.08); }
+  :root[data-theme="light"] .mic-btn.recording{ color:#fff; }
+  :root[data-theme="light"] .form-control:focus,
+  :root[data-theme="light"] .form-select:focus{ box-shadow: 0 0 0 .2rem rgba(11,127,148,.18); }
+  :root[data-theme="light"] .form-check-input:focus{ box-shadow: 0 0 0 .2rem rgba(11,127,148,.18); }
+  :root[data-theme="light"] .flashcard-face{ box-shadow: 0 1px 0 var(--line), 0 20px 40px -24px rgba(20,27,45,.25); }
+  :root[data-theme="light"] .quiz-timer-badge.low-time{ background: rgba(210,48,74,.1); }
 </style>
 </head>
 <body>
@@ -578,7 +665,8 @@
   <div class="container d-flex align-items-center">
     <span class="term-dots" aria-hidden="true"><span></span><span></span><span></span></span>
     <span class="wordmark"><span class="prompt">&gt;</span> reviewer<span class="cursor">_</span></span>
-    <select class="form-select form-select-sm voice-lang ms-auto" id="voice-lang" aria-label="Voice input language" title="Voice input language" style="display:none;">
+    <div class="ms-auto d-flex align-items-center gap-2">
+    <select class="form-select form-select-sm voice-lang" id="voice-lang" aria-label="Voice input language" title="Voice input language" style="display:none;">
       <option value="en-US">🎤 English (US)</option>
       <option value="en-PH">🎤 English (PH)</option>
       <option value="fil-PH">🎤 Filipino</option>
@@ -588,6 +676,10 @@
       <option value="ko-KR">🎤 한국어</option>
       <option value="zh-CN">🎤 中文</option>
     </select>
+    <button type="button" class="btn btn-outline-secondary theme-toggle" id="theme-toggle" aria-label="Switch to light mode" title="Switch to light mode">
+      <i class="bi bi-sun-fill"></i>
+    </button>
+    </div>
   </div>
 </div>
 
@@ -988,6 +1080,75 @@
   function showToast(msg){
     document.getElementById("appToastBody").textContent = msg;
     toast.show();
+  }
+
+  /* ===================== THEME (dark / light) ===================== */
+
+  var LS_THEME_KEY = "reviewerApp.theme.v1";
+
+  function currentTheme(){
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+
+  function cssVar(name){
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function chartColors(){
+    return {
+      correct: cssVar("--green") || "#48E2A0",
+      incorrect: cssVar("--red") || "#FF6B7A",
+      border: cssVar("--panel") || "#121826",
+      text: cssVar("--text") || "#E7ECF5"
+    };
+  }
+
+  function setTheme(theme, persist){
+    theme = (theme === "light") ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-bs-theme", theme);
+
+    var btn = document.getElementById("theme-toggle");
+    if(btn){
+      var toLight = (theme === "dark");
+      var label = toLight ? "Switch to light mode" : "Switch to dark mode";
+      btn.innerHTML = '<i class="bi ' + (toLight ? "bi-sun-fill" : "bi-moon-stars-fill") + '"></i>';
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("title", label);
+    }
+
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute("content", cssVar("--bg") || (theme === "light" ? "#F3F6FB" : "#0A0E17"));
+
+    // keep an already-drawn results chart in sync
+    if(resultsChartInstance){
+      var c = chartColors();
+      var ds = resultsChartInstance.data.datasets[0];
+      ds.backgroundColor = [c.correct, c.incorrect];
+      ds.borderColor = c.border;
+      resultsChartInstance.options.plugins.legend.labels.color = c.text;
+      resultsChartInstance.update();
+    }
+
+    if(persist){
+      try{ localStorage.setItem(LS_THEME_KEY, theme); }catch(e){}
+    }
+  }
+
+  document.getElementById("theme-toggle").addEventListener("click", function(){
+    setTheme(currentTheme() === "dark" ? "light" : "dark", true);
+  });
+
+  // Follow the system setting until the user picks a theme themselves.
+  if(window.matchMedia){
+    var themeMq = window.matchMedia("(prefers-color-scheme: light)");
+    var onSystemTheme = function(e){
+      var saved = null;
+      try{ saved = localStorage.getItem(LS_THEME_KEY); }catch(err){}
+      if(saved !== "light" && saved !== "dark") setTheme(e.matches ? "light" : "dark", false);
+    };
+    if(themeMq.addEventListener) themeMq.addEventListener("change", onSystemTheme);
+    else if(themeMq.addListener) themeMq.addListener(onSystemTheme);
   }
 
   /* ===================== VOICE INPUT ===================== */
@@ -2076,21 +2237,22 @@
 
     var ctx = document.getElementById("quiz-results-chart").getContext("2d");
     if(resultsChartInstance) resultsChartInstance.destroy();
+    var cc = chartColors();
     resultsChartInstance = new Chart(ctx, {
       type: "doughnut",
       data: {
         labels: ["Correct", "Incorrect"],
         datasets: [{
           data: [correct, incorrect],
-          backgroundColor: ["#48E2A0", "#FF6B7A"],
-          borderColor: "#121826",
+          backgroundColor: [cc.correct, cc.incorrect],
+          borderColor: cc.border,
           borderWidth: 2
         }]
       },
       options: {
         responsive: false,
         plugins: {
-          legend: { position: "bottom", labels: { color: "#E7ECF5", font: { family: "Space Grotesk" } } }
+          legend: { position: "bottom", labels: { color: cc.text, font: { family: "Space Grotesk" } } }
         }
       }
     });
@@ -2200,6 +2362,7 @@
   });
 
   /* ===================== init ===================== */
+  setTheme(currentTheme(), false); // sync toggle icon + browser theme color
   initVoiceLangSelect();
   decorateMics(document.getElementById("nameModal"));
   renderHome();
