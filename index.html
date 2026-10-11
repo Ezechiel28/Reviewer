@@ -873,6 +873,11 @@
       if(!raw) return [];
       var parsed = JSON.parse(raw);
       if(!Array.isArray(parsed)) return [];
+      parsed.forEach(function(r){
+        (r && Array.isArray(r.cards) ? r.cards : []).forEach(function(c){
+          if(c && c.type === "multipleChoice") c.answer = normalizeMc(c.answer);
+        });
+      });
       return parsed;
     }catch(e){
       console.error("Failed to load reviewers", e);
@@ -913,8 +918,26 @@
     if(type === "identification") return "";
     if(type === "enumeration") return [""];
     if(type === "trueFalse") return "true";
-    if(type === "multipleChoice") return { options:["",""], correctIndex:0 };
+    if(type === "multipleChoice") return { options:["",""], correct:[0] };
     return "";
+  }
+
+  // Multiple choice can have several correct options. Older saves used a single
+  // `correctIndex`; this converts them to the `correct` array.
+  function normalizeMc(ans){
+    if(!ans || typeof ans !== "object") ans = {};
+    if(!Array.isArray(ans.options) || ans.options.length < 2) ans.options = ["",""];
+    var c = Array.isArray(ans.correct) ? ans.correct
+          : (Number.isInteger(ans.correctIndex) ? [ans.correctIndex] : [0]);
+    var seen = {};
+    c = c.filter(function(i){
+      if(!Number.isInteger(i) || i < 0 || i >= ans.options.length || seen[i]) return false;
+      seen[i] = true; return true;
+    }).sort(function(a,b){ return a-b; });
+    if(!c.length) c = [0];
+    ans.correct = c;
+    delete ans.correctIndex;
+    return ans;
   }
 
   /* ===================== helpers ===================== */
@@ -1424,11 +1447,9 @@
     } else if(type === "trueFalse"){
       card.answer = (c && (c.answer === "true" || c.answer === "false")) ? c.answer : "true";
     } else if(type === "multipleChoice"){
-      var opts = (c && c.answer && Array.isArray(c.answer.options) && c.answer.options.length >= 2)
-        ? c.answer.options.map(String) : ["",""];
-      var ci = (c && c.answer && Number.isInteger(c.answer.correctIndex) && c.answer.correctIndex >= 0 && c.answer.correctIndex < opts.length)
-        ? c.answer.correctIndex : 0;
-      card.answer = { options: opts, correctIndex: ci };
+      var src = (c && c.answer && typeof c.answer === "object") ? c.answer : {};
+      var opts = (Array.isArray(src.options) && src.options.length >= 2) ? src.options.map(String) : ["",""];
+      card.answer = normalizeMc({ options: opts, correct: src.correct, correctIndex: src.correctIndex });
     }
     return card;
   }
@@ -1623,14 +1644,14 @@
       var opts = card.answer.options.map(function(val, i){
         return (
           '<div class="mc-option">' +
-            '<input type="radio" class="form-check-input mc-correct-input" name="mc-'+card.id+'" data-idx="'+i+'" '+(card.answer.correctIndex===i?"checked":"")+' aria-label="Mark option '+(i+1)+' as correct">' +
+            '<input type="checkbox" class="form-check-input mc-correct-input" data-idx="'+i+'" '+(card.answer.correct.indexOf(i)!==-1?"checked":"")+' aria-label="Mark option '+(i+1)+' as correct" title="Tick if this is a correct answer">' +
             '<input type="text" class="form-control mc-option-input" data-idx="'+i+'" value="'+escapeHtml(val)+'" placeholder="Option '+(i+1)+'">' +
             '<button type="button" class="btn-icon remove-mc-btn" data-idx="'+i+'" aria-label="Remove option" ' + (card.answer.options.length<=2?"disabled":"") + '><i class="bi bi-dash-circle"></i></button>' +
           '</div>'
         );
       }).join("");
       return (
-        '<label class="form-label small d-block">Options — select the correct one</label>' +
+        '<label class="form-label small d-block">Options — tick every correct answer (one or more)</label>' +
         opts +
         '<button type="button" class="btn btn-sm btn-outline-secondary add-mc-btn"><i class="bi bi-plus-lg me-1"></i>Add option</button>'
       );
@@ -1736,7 +1757,20 @@
         var cid = this.closest(".card-block").getAttribute("data-card-id");
         var card = findCard(r, cid);
         if(!card) return;
-        card.answer.correctIndex = parseInt(this.getAttribute("data-idx"),10);
+        var idx = parseInt(this.getAttribute("data-idx"),10);
+        var list = card.answer.correct.slice();
+        var pos = list.indexOf(idx);
+        if(this.checked){
+          if(pos === -1) list.push(idx);
+        } else {
+          if(list.length <= 1){
+            this.checked = true;
+            showToast("At least one option must be marked correct.");
+            return;
+          }
+          if(pos !== -1) list.splice(pos,1);
+        }
+        card.answer.correct = list.sort(function(a,b){ return a-b; });
         touchReviewer(r);
       });
     });
@@ -1757,11 +1791,10 @@
         if(!card || card.answer.options.length<=2) return;
         var idx = parseInt(this.getAttribute("data-idx"),10);
         card.answer.options.splice(idx,1);
-        if(card.answer.correctIndex >= card.answer.options.length){
-          card.answer.correctIndex = card.answer.options.length - 1;
-        } else if(card.answer.correctIndex > idx){
-          card.answer.correctIndex -= 1;
-        }
+        card.answer.correct = card.answer.correct
+          .filter(function(i){ return i !== idx; })
+          .map(function(i){ return i > idx ? i - 1 : i; });
+        if(!card.answer.correct.length) card.answer.correct = [0];
         touchReviewer(r);
         renderEditor();
       });
@@ -1923,18 +1956,26 @@
         });
       });
     } else if(card.type === "multipleChoice"){
-      area.innerHTML = '<div class="list-group">' + card.answer.options.map(function(opt, i){
-        var checked = (existing === i);
-        return (
-          '<label class="list-group-item d-flex align-items-center gap-2">' +
-            '<input type="radio" name="quiz-mc" value="'+i+'" '+(checked?"checked":"")+'>' +
-            '<span>' + escapeHtml(opt || ("Option "+(i+1))) + '</span>' +
-          '</label>'
-        );
-      }).join("") + '</div>';
+      var multi = card.answer.correct.length > 1;
+      var picked = Array.isArray(existing) ? existing : [];
+      area.innerHTML =
+        '<div class="small text-body-secondary mb-2 mono">' + (multi ? "Select all that apply" : "Choose one") + '</div>' +
+        '<div class="list-group">' + card.answer.options.map(function(opt, i){
+          var checked = picked.indexOf(i) !== -1;
+          return (
+            '<label class="list-group-item d-flex align-items-center gap-2">' +
+              '<input class="form-check-input mt-0" type="' + (multi ? "checkbox" : "radio") + '" name="quiz-mc" value="'+i+'" '+(checked?"checked":"")+'>' +
+              '<span>' + escapeHtml(opt || ("Option "+(i+1))) + '</span>' +
+            '</label>'
+          );
+        }).join("") + '</div>';
       document.querySelectorAll('input[name="quiz-mc"]').forEach(function(inp){
         inp.addEventListener("change", function(){
-          q.answers[q.current] = parseInt(this.value,10);
+          var sel = [];
+          document.querySelectorAll('input[name="quiz-mc"]:checked').forEach(function(x){
+            sel.push(parseInt(x.value,10));
+          });
+          q.answers[q.current] = sel.length ? sel.sort(function(a,b){ return a-b; }) : undefined;
           updateProgressOnly();
         });
       });
@@ -1989,7 +2030,9 @@
       return given === card.answer;
     }
     if(card.type === "multipleChoice"){
-      return given === card.answer.correctIndex;
+      if(!Array.isArray(given)) return false;
+      var want = card.answer.correct;
+      return given.length === want.length && want.every(function(i){ return given.indexOf(i) !== -1; });
     }
     if(card.type === "enumeration"){
       var givenSet = String(given).split(/[\n,]/).map(normalizeSpoken).filter(function(s){ return s!==""; }).sort();
@@ -2090,8 +2133,9 @@
     if(card.type === "enumeration") return card.answer.filter(function(s){return s!=="";}).join(", ") || "(no answers set)";
     if(card.type === "trueFalse") return card.answer === "true" ? "True" : "False";
     if(card.type === "multipleChoice"){
-      var opt = card.answer.options[card.answer.correctIndex];
-      return opt || "(no answer set)";
+      var texts = card.answer.correct.map(function(i){ return card.answer.options[i]; })
+        .filter(function(s){ return s; });
+      return texts.join(", ") || "(no answer set)";
     }
     return "";
   }
