@@ -236,7 +236,7 @@
     align-items:center;
     gap:.15rem;
   }
-  .reviewer-row .btn-icon{
+  .btn-icon{
     background:transparent;
     border:none;
     color: var(--text-faint);
@@ -247,7 +247,7 @@
     justify-content:center;
     transition: background-color .15s ease, color .15s ease, transform .15s ease;
   }
-  .reviewer-row .btn-icon:hover{ background: rgba(255,255,255,.06); color:var(--text); transform: translateY(-1px); }
+  .btn-icon:hover{ background: rgba(255,255,255,.06); color:var(--text); transform: translateY(-1px); }
   .reviewer-row .btn-icon.pin-active{ color: var(--amber); }
   .reviewer-row .delete-btn:hover{ color: var(--red); }
 
@@ -345,6 +345,7 @@
     gap:.5rem;
     margin-bottom:.5rem;
   }
+  .enum-item .voice-group, .mc-option .voice-group{ flex:1 1 auto; min-width:0; width:auto; }
 
   .add-flashcard-btn{
     border: 1.5px dashed var(--line);
@@ -390,6 +391,38 @@
     border-color: var(--cyan);
     color: var(--cyan);
     box-shadow: inset 0 0 0 1px var(--cyan);
+  }
+
+  /* ---------- voice input ---------- */
+  .voice-group{ flex-wrap:nowrap; }
+  .voice-group > .form-control{ min-width:0; }
+  .mic-btn{
+    flex:none;
+    width:2.6rem;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background: var(--bg-alt);
+    border:1px solid var(--line);
+    color: var(--text-dim);
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .voice-group > textarea + .mic-btn{ align-items:flex-start; padding-top:.55rem; }
+  .mic-btn:hover{ color: var(--cyan); border-color: var(--cyan-dim); background: rgba(79,216,236,.08); }
+  .mic-btn.recording{
+    color:#1a0708;
+    background: var(--red);
+    border-color: var(--red);
+    animation: pulseGlow 1.1s ease-in-out infinite;
+  }
+  .voice-group:has(.mic-btn.recording) > .form-control{ border-color: var(--red); }
+
+  .voice-lang{
+    font-family: var(--font-mono);
+    font-size:.78rem;
+    width:auto;
+    max-width: 150px;
+    padding-top:.2rem; padding-bottom:.2rem;
   }
 
   /* ---------- quiz ---------- */
@@ -545,6 +578,16 @@
   <div class="container d-flex align-items-center">
     <span class="term-dots" aria-hidden="true"><span></span><span></span><span></span></span>
     <span class="wordmark"><span class="prompt">&gt;</span> reviewer<span class="cursor">_</span></span>
+    <select class="form-select form-select-sm voice-lang ms-auto" id="voice-lang" aria-label="Voice input language" title="Voice input language" style="display:none;">
+      <option value="en-US">🎤 English (US)</option>
+      <option value="en-PH">🎤 English (PH)</option>
+      <option value="fil-PH">🎤 Filipino</option>
+      <option value="en-GB">🎤 English (UK)</option>
+      <option value="es-ES">🎤 Español</option>
+      <option value="ja-JP">🎤 日本語</option>
+      <option value="ko-KR">🎤 한국어</option>
+      <option value="zh-CN">🎤 中文</option>
+    </select>
   </div>
 </div>
 
@@ -569,7 +612,7 @@
       </button>
       <input type="file" id="import-file-input" accept="application/json,.json" style="display:none;">
     </div>
-    <p class="small mb-3" style="color:var(--ink-soft);">Switching devices? Export a backup here, then import it wherever you continue.</p>
+    <p class="small mb-3" style="color:var(--text-dim);">Switching devices? Export a backup here, then import it wherever you continue.</p>
 
     <div id="pinned-section" style="display:none;">
       <div class="section-label">Pinned</div>
@@ -589,12 +632,12 @@
 
   <!-- ============ REVIEWER PAGE ============ -->
   <section id="view-reviewer" class="app-view">
-    <button type="button" class="btn btn-link ps-0 text-decoration-none mb-2" id="btn-back-home" style="color:var(--ink-soft);">
+    <button type="button" class="btn btn-link ps-0 text-decoration-none mb-2" id="btn-back-home" style="color:var(--text-dim);">
       <i class="bi bi-arrow-left me-1"></i>Back to reviewers
     </button>
 
     <div class="reviewer-header d-flex align-items-center flex-wrap gap-2 mb-3">
-      <input type="text" class="rname-input" id="reviewer-name-input" aria-label="Reviewer name">
+      <input type="text" class="rname-input" id="reviewer-name-input" aria-label="Reviewer name" data-no-mic="1">
       <span class="text-body-secondary small" id="reviewer-card-count"></span>
     </div>
 
@@ -793,10 +836,10 @@
 </div>
 
 <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1080;">
-  <div id="appToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true" style="background:var(--ink); color:#fff;">
+  <div id="appToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true" style="background:var(--panel-raised); color:var(--text);">
     <div class="d-flex">
       <div class="toast-body" id="appToastBody"></div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>
   </div>
 </div>
@@ -810,6 +853,7 @@
 
   /* ===================== storage & model ===================== */
   var LS_KEY = "reviewerApp.reviewers.v1";
+  var LS_LANG_KEY = "reviewerApp.voiceLang.v1";
   var PIN_LIMIT = 3;
 
   var state = {
@@ -923,9 +967,167 @@
     toast.show();
   }
 
+  /* ===================== VOICE INPUT ===================== */
+  /* Adds a mic button next to every text field. Tap it, speak, and your words
+     are typed into the field live. Tap again (or tap elsewhere) to stop. */
+
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var voiceSupported = !!SpeechRec;
+  var voiceLang = "en-US";
+  try{ voiceLang = localStorage.getItem(LS_LANG_KEY) || ((navigator.language && /^[a-z]{2,3}-[A-Z]{2}$/.test(navigator.language)) ? navigator.language : "en-US"); }catch(e){}
+
+  var voice = { rec:null, el:null, btn:null };
+
+  function initVoiceLangSelect(){
+    var sel = document.getElementById("voice-lang");
+    if(!voiceSupported){ sel.style.display = "none"; return; }
+    var has = false;
+    for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value === voiceLang) has = true; }
+    if(!has){
+      var opt = document.createElement("option");
+      opt.value = voiceLang; opt.textContent = "\uD83C\uDFA4 " + voiceLang;
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = voiceLang;
+    sel.style.display = "";
+    sel.addEventListener("change", function(){
+      voiceLang = this.value;
+      try{ localStorage.setItem(LS_LANG_KEY, voiceLang); }catch(e){}
+      stopVoice();
+    });
+  }
+
+  function stopVoice(){
+    if(voice.rec){
+      try{ voice.rec.stop(); }catch(e){}
+    }
+  }
+
+  function clearVoiceState(){
+    if(voice.btn){
+      voice.btn.classList.remove("recording");
+      voice.btn.setAttribute("aria-pressed", "false");
+      voice.btn.innerHTML = '<i class="bi bi-mic-fill"></i>';
+    }
+    voice.rec = null; voice.el = null; voice.btn = null;
+  }
+
+  function startVoice(el, btn){
+    var rec = new SpeechRec();
+    rec.lang = voiceLang;
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+
+    var linesMode = el.hasAttribute("data-voice-lines");
+    var sep = linesMode ? "\n" : " ";
+    var base = el.value.replace(/\s+$/,"");
+    var finalText = "";
+
+    function apply(interim){
+      var spoken = finalText;
+      if(interim) spoken += (spoken ? sep : "") + interim.trim();
+      var out = base;
+      if(spoken) out = base ? (base + sep + spoken) : spoken;
+      el.value = out;
+      el.dispatchEvent(new Event("input", { bubbles:true }));
+    }
+
+    rec.onresult = function(ev){
+      var interim = "";
+      for(var i=ev.resultIndex;i<ev.results.length;i++){
+        var t = ev.results[i][0].transcript;
+        if(ev.results[i].isFinal){
+          t = t.trim();
+          if(t) finalText += (finalText ? sep : "") + t;
+        } else {
+          interim += t;
+        }
+      }
+      apply(interim);
+    };
+
+    rec.onerror = function(ev){
+      var code = ev && ev.error;
+      if(code === "not-allowed" || code === "service-not-allowed"){
+        showToast("Microphone blocked. Allow mic access in your browser, then try again.");
+      } else if(code === "no-speech"){
+        showToast("Didn't catch anything. Try again.");
+      } else if(code === "audio-capture"){
+        showToast("No microphone found.");
+      } else if(code === "network"){
+        showToast("Voice input needs an internet connection.");
+      } else if(code === "language-not-supported"){
+        showToast("That language isn't supported for voice input here.");
+      } else if(code !== "aborted"){
+        showToast("Voice input stopped (" + code + ").");
+      }
+    };
+
+    rec.onend = function(){
+      // commit whatever was heard (drop any unfinished interim text)
+      if(voice.rec === rec){ clearVoiceState(); }
+    };
+
+    voice.rec = rec; voice.el = el; voice.btn = btn;
+    btn.classList.add("recording");
+    btn.setAttribute("aria-pressed", "true");
+    btn.innerHTML = '<i class="bi bi-stop-fill"></i>';
+
+    try{
+      rec.start();
+      el.focus();
+    }catch(e){
+      clearVoiceState();
+      showToast("Couldn't start voice input.");
+    }
+  }
+
+  function toggleMic(el, btn){
+    if(voice.rec && voice.el === el){ stopVoice(); return; }
+    if(voice.rec){
+      var old = voice.rec;
+      try{ old.onend = null; old.abort(); }catch(e){}
+      clearVoiceState();
+    }
+    startVoice(el, btn);
+  }
+
+  function decorateMics(root){
+    if(!voiceSupported) return;
+    var scope = root || document;
+    var fields = scope.querySelectorAll('input[type="text"], textarea');
+    Array.prototype.forEach.call(fields, function(el){
+      if(el.hasAttribute("data-no-mic") || el.hasAttribute("data-mic")) return;
+      el.setAttribute("data-mic", "1");
+
+      var wrap = document.createElement("div");
+      wrap.className = "input-group voice-group";
+      el.parentNode.insertBefore(wrap, el);
+      wrap.appendChild(el);
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn mic-btn";
+      btn.title = "Speak instead of typing";
+      btn.setAttribute("aria-label", "Dictate with your voice");
+      btn.setAttribute("aria-pressed", "false");
+      btn.innerHTML = '<i class="bi bi-mic-fill"></i>';
+      btn.addEventListener("mousedown", function(e){ e.preventDefault(); }); // keep focus in field
+      btn.addEventListener("click", function(){ toggleMic(el, btn); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  // Stop dictation when leaving a screen or opening a dialog
+  ["nameModal","deleteModal","importModal"].forEach(function(id){
+    document.getElementById(id).addEventListener("hide.bs.modal", stopVoice);
+  });
+
   /* ===================== view switching ===================== */
 
   function showView(name){
+    stopVoice();
     document.querySelectorAll(".app-view").forEach(function(el){ el.classList.remove("active", "anim-in"); });
     var target = document.getElementById("view-" + name);
     target.classList.add("active");
@@ -1072,6 +1274,7 @@
   });
 
   function confirmNameModal(){
+    stopVoice();
     var input = document.getElementById("nameModalInput");
     var name = input.value.trim();
     if(!name) name = "Untitled reviewer";
@@ -1296,6 +1499,7 @@
   });
 
   function exitCurrentMode(){
+    stopVoice();
     if(state.mode === "quiz" && state.quiz && state.quiz.phase === "running"){
       stopQuizTimers();
       state.quiz = null;
@@ -1306,9 +1510,6 @@
   }
 
   function switchMode(mode){
-    if(mode === state.mode && document.getElementById("mode-"+mode).style.display !== "none"){
-      // still refresh in case of underlying data changes
-    }
     exitCurrentMode();
     state.mode = mode;
 
@@ -1337,9 +1538,11 @@
   function renderEditor(){
     var r = getReviewer(state.currentReviewerId);
     if(!r) return;
+    stopVoice();
     var container = document.getElementById("cards-container");
     container.innerHTML = r.cards.map(cardBlockHtml).join("");
     bindEditorEvents();
+    decorateMics(container);
   }
 
   function cardBlockHtml(card, idx){
@@ -1371,7 +1574,7 @@
 
           '<div class="mb-2">' +
             '<label class="form-label small">Question / item</label>' +
-            '<textarea class="form-control question-input" rows="2" data-card-id="' + card.id + '" placeholder="Type the question or item">' + escapeHtml(card.question) + '</textarea>' +
+            '<textarea class="form-control question-input" rows="2" data-card-id="' + card.id + '" placeholder="Type or speak the question or item">' + escapeHtml(card.question) + '</textarea>' +
           '</div>' +
 
           '<div class="answer-editor" data-card-id="' + card.id + '">' +
@@ -1672,6 +1875,8 @@
     var total = q.questions.length;
     var answeredCount = q.answers.filter(function(a){ return a !== undefined; }).length;
 
+    stopVoice();
+
     var quizCardEl = document.querySelector(".quiz-card");
     quizCardEl.classList.remove("q-enter");
     void quizCardEl.offsetWidth;
@@ -1689,7 +1894,7 @@
     var existing = q.answers[q.current];
 
     if(card.type === "identification"){
-      area.innerHTML = '<input type="text" class="form-control" id="quiz-input-ident" placeholder="Type your answer" value="'+escapeHtml(existing||"")+'">';
+      area.innerHTML = '<input type="text" class="form-control" id="quiz-input-ident" placeholder="Type or speak your answer" value="'+escapeHtml(existing||"")+'">';
       document.getElementById("quiz-input-ident").addEventListener("input", function(){
         q.answers[q.current] = this.value;
         updateProgressOnly();
@@ -1697,7 +1902,7 @@
     } else if(card.type === "enumeration"){
       area.innerHTML =
         '<label class="form-label small">List your answers (one per line) — expecting ' + card.answer.length + '</label>' +
-        '<textarea class="form-control" id="quiz-input-enum" rows="4">'+escapeHtml(existing||"")+'</textarea>';
+        '<textarea class="form-control" id="quiz-input-enum" rows="4" data-voice-lines="1">'+escapeHtml(existing||"")+'</textarea>';
       document.getElementById("quiz-input-enum").addEventListener("input", function(){
         q.answers[q.current] = this.value;
         updateProgressOnly();
@@ -1735,6 +1940,8 @@
       });
     }
 
+    decorateMics(area);
+
     document.getElementById("btn-quiz-prev").disabled = (q.current === 0);
     document.getElementById("btn-quiz-next").textContent = (q.current === total-1) ? "Finish quiz" : "Next";
   }
@@ -1766,6 +1973,7 @@
   });
 
   document.getElementById("btn-exit-quiz").addEventListener("click", function(){
+    stopVoice();
     stopQuizTimers();
     state.quiz = null;
     renderQuizSetup();
@@ -1775,7 +1983,7 @@
   function gradeAnswer(card, given){
     if(given === undefined || given === null) return false;
     if(card.type === "identification"){
-      return normalize(given) === normalize(card.answer) && normalize(card.answer) !== "";
+      return normalizeSpoken(given) === normalizeSpoken(card.answer) && normalize(card.answer) !== "";
     }
     if(card.type === "trueFalse"){
       return given === card.answer;
@@ -1784,8 +1992,8 @@
       return given === card.answer.correctIndex;
     }
     if(card.type === "enumeration"){
-      var givenSet = String(given).split(/[\n,]/).map(normalize).filter(function(s){ return s!==""; }).sort();
-      var correctSet = card.answer.map(normalize).filter(function(s){ return s!==""; }).sort();
+      var givenSet = String(given).split(/[\n,]/).map(normalizeSpoken).filter(function(s){ return s!==""; }).sort();
+      var correctSet = card.answer.map(normalizeSpoken).filter(function(s){ return s!==""; }).sort();
       if(givenSet.length !== correctSet.length || correctSet.length===0) return false;
       for(var i=0;i<correctSet.length;i++){
         if(givenSet[i] !== correctSet[i]) return false;
@@ -1795,11 +2003,17 @@
     return false;
   }
 
+  // Like normalize(), but ignores trailing punctuation that speech engines sometimes add.
+  function normalizeSpoken(str){
+    return normalize(str).replace(/[.!?;:]+$/,"").trim();
+  }
+
   var resultsChartInstance = null;
 
   function finishQuiz(){
     var q = state.quiz;
     if(!q) return;
+    stopVoice();
     stopQuizTimers();
     q.phase = "results";
 
@@ -1825,15 +2039,15 @@
         labels: ["Correct", "Incorrect"],
         datasets: [{
           data: [correct, incorrect],
-          backgroundColor: ["#1B6B72", "#B8433A"],
-          borderColor: "#F8F6EE",
+          backgroundColor: ["#48E2A0", "#FF6B7A"],
+          borderColor: "#121826",
           borderWidth: 2
         }]
       },
       options: {
         responsive: false,
         plugins: {
-          legend: { position: "bottom", labels: { color: "#1C2321", font: { family: "IBM Plex Sans" } } }
+          legend: { position: "bottom", labels: { color: "#E7ECF5", font: { family: "Space Grotesk" } } }
         }
       }
     });
@@ -1942,6 +2156,8 @@
   });
 
   /* ===================== init ===================== */
+  initVoiceLangSelect();
+  decorateMics(document.getElementById("nameModal"));
   renderHome();
 
 })();
