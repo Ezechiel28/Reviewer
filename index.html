@@ -588,6 +588,59 @@
 
   .toast{ font-family: var(--font-mono); font-size:.86rem; border-left: 3px solid var(--cyan) !important; }
 
+  /* ---------- mistake review ---------- */
+  .review-item{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--red);
+    border-radius: var(--bs-border-radius-lg);
+    padding: 1rem 1.1rem;
+    margin-bottom: .75rem;
+    animation: fadeSlideUp .3s ease both;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+  .review-item .rv-head{
+    display:flex; align-items:center; gap:.5rem;
+    font-family: var(--font-mono);
+    font-size:.74rem;
+    color: var(--text-faint);
+    margin-bottom:.4rem;
+  }
+  .review-item .rv-q{
+    font-family: var(--font-display);
+    font-size:1.05rem;
+    color: var(--text);
+    margin-bottom:.75rem;
+    white-space: pre-wrap;
+  }
+  .review-item .rv-row{
+    display:flex; gap:.6rem; align-items:baseline;
+    font-size:.92rem;
+    padding:.35rem 0;
+    border-top: 1px dashed var(--line-soft);
+  }
+  .review-item .rv-tag{
+    flex:none;
+    width:5.2rem;
+    font-family: var(--font-mono);
+    font-size:.72rem;
+  }
+  .review-item .rv-wrong .rv-tag{ color: var(--red); }
+  .review-item .rv-right .rv-tag{ color: var(--green); }
+  .review-item .rv-wrong .rv-val{ color: var(--red); }
+  .review-item .rv-right .rv-val{ color: var(--green); }
+  .review-item .rv-val{ white-space: pre-wrap; word-break: break-word; min-width:0; }
+  .review-item .rv-val.rv-empty{ color: var(--text-faint); font-style: italic; }
+  .review-perfect{
+    border: 1px dashed var(--green);
+    border-radius: var(--bs-border-radius-lg);
+    padding: 1.5rem;
+    text-align:center;
+    color: var(--green);
+    font-family: var(--font-mono);
+    background: var(--panel);
+  }
+
   /* ---------- theme toggle ---------- */
   .theme-toggle{
     display:inline-flex; align-items:center; justify-content:center;
@@ -802,10 +855,16 @@
         <div class="card-block" style="max-width:420px;">
           <canvas id="quiz-results-chart" width="360" height="240" aria-label="Quiz results chart" role="img"></canvas>
         </div>
-        <div class="d-flex gap-2 mt-3">
+        <div class="d-flex flex-wrap gap-2 mt-3">
           <button type="button" class="btn btn-primary" id="btn-retake-quiz">Retake quiz</button>
+          <button type="button" class="btn btn-outline-secondary" id="btn-retry-mistakes" style="display:none;">
+            <i class="bi bi-arrow-repeat me-1"></i>Retry mistakes only
+          </button>
           <button type="button" class="btn btn-outline-secondary" id="btn-quiz-done">Back to editor</button>
         </div>
+
+        <div class="section-label" id="quiz-review-label">Review your mistakes</div>
+        <div id="quiz-review-list"></div>
       </div>
     </div>
 
@@ -2001,16 +2060,18 @@
     document.getElementById("quiz-timer-minutes-wrap").style.display = this.checked ? "block" : "none";
   });
 
-  document.getElementById("btn-start-quiz").addEventListener("click", startQuiz);
+  document.getElementById("btn-start-quiz").addEventListener("click", function(){ startQuiz(); });
 
-  function startQuiz(){
+  // `subset` (optional) is an array of cards to quiz on instead of the whole reviewer.
+  function startQuiz(subset){
     var r = getReviewer(state.currentReviewerId);
     if(!r || r.cards.length === 0) return;
 
     var useTimer = document.getElementById("quiz-timer-toggle").checked;
     var minutes = parseInt(document.getElementById("quiz-timer-minutes").value, 10) || 10;
 
-    var questions = shuffle(r.cards);
+    var pool = (Array.isArray(subset) && subset.length) ? subset : r.cards;
+    var questions = shuffle(pool);
 
     state.quiz = {
       phase: "running",
@@ -2213,6 +2274,75 @@
   }
 
   var resultsChartInstance = null;
+  var lastMistakeCards = [];
+
+  var REVIEW_TYPE_LABELS = { identification:"Identification", enumeration:"Enumeration", trueFalse:"True or False", multipleChoice:"Multiple choice" };
+
+  // Turn what the user answered into readable text; "" means no answer.
+  function describeGiven(card, given){
+    if(given === undefined || given === null) return "";
+    if(card.type === "identification") return String(given).trim();
+    if(card.type === "enumeration"){
+      return String(given).split(/[\n,]/).map(function(s){ return s.trim(); })
+        .filter(function(s){ return s; }).join("\n");
+    }
+    if(card.type === "trueFalse") return given === "true" ? "True" : (given === "false" ? "False" : "");
+    if(card.type === "multipleChoice"){
+      if(!Array.isArray(given)) return "";
+      return given.map(function(i){
+        return card.answer.options[i] || ("Option " + (i+1));
+      }).join("\n");
+    }
+    return "";
+  }
+
+  function describeCorrect(card){
+    if(card.type === "enumeration"){
+      return card.answer.filter(function(s){ return s !== ""; }).join("\n") || "(no answer set)";
+    }
+    if(card.type === "multipleChoice"){
+      return card.answer.correct.map(function(i){
+        return card.answer.options[i] || ("Option " + (i+1));
+      }).join("\n") || "(no answer set)";
+    }
+    return formatAnswerForDisplay(card);
+  }
+
+  function renderMistakeReview(mistakes, total){
+    var label = document.getElementById("quiz-review-label");
+    var list = document.getElementById("quiz-review-list");
+    var retryBtn = document.getElementById("btn-retry-mistakes");
+
+    if(mistakes.length === 0){
+      label.style.display = "none";
+      retryBtn.style.display = "none";
+      list.innerHTML = '<div class="review-perfect"><i class="bi bi-stars me-1"></i>Perfect score &mdash; no mistakes to review.</div>';
+      return;
+    }
+
+    label.style.display = "";
+    label.textContent = "Review your mistakes (" + mistakes.length + ")";
+    retryBtn.style.display = "";
+    retryBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Retry ' + mistakes.length + (mistakes.length === 1 ? " mistake" : " mistakes");
+
+    list.innerHTML = mistakes.map(function(m, i){
+      var yours = describeGiven(m.card, m.given);
+      return (
+        '<div class="review-item" style="--i:' + i + ';">' +
+          '<div class="rv-head"><i class="bi bi-x-circle-fill" style="color:var(--red);"></i>' +
+            '<span>' + escapeHtml(REVIEW_TYPE_LABELS[m.card.type] || "") + '</span></div>' +
+          '<div class="rv-q">' + escapeHtml(m.card.question || "(No question text)") + '</div>' +
+          '<div class="rv-row rv-wrong"><span class="rv-tag">Your answer</span>' +
+            (yours
+              ? '<span class="rv-val">' + escapeHtml(yours) + '</span>'
+              : '<span class="rv-val rv-empty">No answer</span>') +
+          '</div>' +
+          '<div class="rv-row rv-right"><span class="rv-tag">Correct</span>' +
+            '<span class="rv-val">' + escapeHtml(describeCorrect(m.card)) + '</span></div>' +
+        '</div>'
+      );
+    }).join("");
+  }
 
   function finishQuiz(){
     var q = state.quiz;
@@ -2223,9 +2353,12 @@
 
     var elapsedSec = (Date.now() - q.startedAt) / 1000;
     var correct = 0;
+    var mistakes = [];
     for(var i=0;i<q.questions.length;i++){
       if(gradeAnswer(q.questions[i], q.answers[i])) correct++;
+      else mistakes.push({ card: q.questions[i], given: q.answers[i] });
     }
+    lastMistakeCards = mistakes.map(function(m){ return m.card; });
     var total = q.questions.length;
     var incorrect = total - correct;
     var pct = total ? Math.round((correct/total)*100) : 0;
@@ -2234,6 +2367,9 @@
     document.getElementById("quiz-results").style.display = "block";
     document.getElementById("quiz-results-summary").textContent =
       "Score: " + correct + " / " + total + " (" + pct + "%) \u00b7 Time taken: " + fmtClock(elapsedSec);
+
+    renderMistakeReview(mistakes, total);
+    window.scrollTo({ top: 0, behavior: "auto" });
 
     var ctx = document.getElementById("quiz-results-chart").getContext("2d");
     if(resultsChartInstance) resultsChartInstance.destroy();
@@ -2263,6 +2399,11 @@
   document.getElementById("btn-retake-quiz").addEventListener("click", function(){
     state.quiz = null;
     startQuiz();
+  });
+  document.getElementById("btn-retry-mistakes").addEventListener("click", function(){
+    var cards = lastMistakeCards.slice();
+    state.quiz = null;
+    startQuiz(cards);
   });
   document.getElementById("btn-quiz-done").addEventListener("click", function(){
     state.quiz = null;
